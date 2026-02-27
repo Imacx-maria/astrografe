@@ -33,6 +33,12 @@ interface FlatRow {
 
 type SortKey = "relevance" | "orc" | "date" | "descricao" | "medida" | "quant" | "preco_unit";
 type SortDir = "asc" | "desc";
+interface SortEntry { key: SortKey; dir: SortDir }
+
+const DEFAULT_SORT: SortEntry[] = [
+  { key: "relevance", dir: "desc" },
+  { key: "date", dir: "desc" },
+];
 
 // Regex fallback: extract first measurement from a description string
 function extractMedida(text: string): string {
@@ -102,32 +108,37 @@ function flattenResults(results: SearchResult[], query: string): FlatRow[] {
   return rows;
 }
 
-function sortRows(rows: FlatRow[], key: SortKey, dir: SortDir): FlatRow[] {
+function sortRows(rows: FlatRow[], stack: SortEntry[]): FlatRow[] {
   return [...rows].sort((a, b) => {
-    if (key === "relevance") {
-      const cmp = b.relevance - a.relevance;
+    for (const { key, dir } of stack) {
+      let cmp: number;
+      if (key === "relevance") {
+        cmp = b.relevance - a.relevance; // always desc
+      } else {
+        const av = String(a[key] ?? "");
+        const bv = String(b[key] ?? "");
+        cmp = av.localeCompare(bv, "pt", { numeric: true, sensitivity: "base" });
+        if (dir === "desc") cmp = -cmp;
+      }
       if (cmp !== 0) return cmp;
-      // tiebreak: most recent date first
-      return b.date.localeCompare(a.date, "pt", { sensitivity: "base" });
     }
-    const av = a[key] ?? "";
-    const bv = b[key] ?? "";
-    const cmp = String(av).localeCompare(String(bv), "pt", { numeric: true, sensitivity: "base" });
-    return dir === "asc" ? cmp : -cmp;
+    return 0;
   });
 }
 
 interface SortableThProps {
   label: string;
   sortKey: SortKey;
-  currentKey: SortKey;
-  currentDir: SortDir;
+  stack: SortEntry[];
   align?: "left" | "right";
   onClick: (key: SortKey) => void;
 }
 
-function SortableTh({ label, sortKey, currentKey, currentDir, align = "left", onClick }: SortableThProps) {
-  const isActive = currentKey === sortKey;
+function SortableTh({ label, sortKey, stack, align = "left", onClick }: SortableThProps) {
+  const idx = stack.findIndex((e) => e.key === sortKey);
+  const isPrimary = idx === 0;
+  const isSecondary = idx > 0;
+  const entry = idx >= 0 ? stack[idx] : null;
   return (
     <th
       className={cn("px-4 py-2 cursor-pointer select-none", align === "right" ? "text-right" : "text-left")}
@@ -135,10 +146,15 @@ function SortableTh({ label, sortKey, currentKey, currentDir, align = "left", on
     >
       <div className={cn("flex items-center gap-1", align === "right" ? "justify-end" : "justify-start")}>
         <span>{label}</span>
-        <span className="inline-block w-3 h-3 ml-1 flex-shrink-0">
-          {isActive ? (
-            currentDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-          ) : null}
+        <span className="inline-block w-4 h-3 ml-1 flex-shrink-0 flex items-center gap-0.5">
+          {isPrimary && entry && (
+            entry.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+          )}
+          {isSecondary && entry && (
+            <span className="opacity-40">
+              {entry.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+            </span>
+          )}
         </span>
       </div>
     </th>
@@ -150,8 +166,7 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("relevance");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [sortStack, setSortStack] = useState<SortEntry[]>(DEFAULT_SORT);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,8 +175,7 @@ export default function SearchPage() {
     setLoading(true);
     setError(null);
     setResults([]);
-    setSortKey("relevance");
-    setSortDir("desc");
+    setSortStack(DEFAULT_SORT);
 
     try {
       const res = await fetch("/api/search", {
@@ -180,18 +194,30 @@ export default function SearchPage() {
   };
 
   const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
+    setSortStack((prev) => {
+      if (prev[0]?.key === key) {
+        // Toggle direction of primary
+        return [{ key, dir: prev[0].dir === "asc" ? "desc" : "asc" }, ...prev.slice(1)];
+      }
+      // Put clicked key first; keep DEFAULT_SORT entries (except the clicked key) as tiebreakers
+      const tiebreakers = DEFAULT_SORT.filter((e) => e.key !== key);
+      return [{ key, dir: "asc" }, ...tiebreakers];
+    });
+  };
+
+  const handleClearSort = () => setSortStack(DEFAULT_SORT);
+
+  const handleClearSearch = () => {
+    setQuery("");
+    setResults([]);
+    setError(null);
+    setSortStack(DEFAULT_SORT);
   };
 
   const rows = useMemo(() => {
     const flat = flattenResults(results, query);
-    return sortRows(flat, sortKey, sortDir);
-  }, [results, query, sortKey, sortDir]);
+    return sortRows(flat, sortStack);
+  }, [results, query, sortStack]);
 
   return (
     <main className="p-8 space-y-6">
@@ -205,6 +231,15 @@ export default function SearchPage() {
           placeholder="e.g. expositor 10x15, bandeiras couché…"
           className="flex-1 border border-border px-4 py-2 text-sm bg-input text-foreground placeholder:text-muted-foreground"
         />
+        {query && (
+          <button
+            type="button"
+            onClick={handleClearSearch}
+            className="px-4 py-2 border border-border text-muted-foreground text-sm hover:bg-accent transition-colors"
+          >
+            Limpar
+          </button>
+        )}
         <button
           type="submit"
           disabled={loading || !query.trim()}
@@ -222,15 +257,23 @@ export default function SearchPage() {
 
       {rows.length > 0 && (
         <div className="overflow-x-auto">
+          <div className="flex justify-end mb-1">
+            <button
+              onClick={handleClearSort}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 border border-border hover:bg-accent"
+            >
+              Limpar ordenação
+            </button>
+          </div>
           <table className="w-full text-sm">
             <thead>
               <tr>
-                <SortableTh label="ORC" sortKey="orc" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
-                <SortableTh label="Data" sortKey="date" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
-                <SortableTh label="Descrição" sortKey="descricao" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
-                <SortableTh label="Medida" sortKey="medida" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
-                <SortableTh label="Quant." sortKey="quant" currentKey={sortKey} currentDir={sortDir} align="right" onClick={handleSort} />
-                <SortableTh label="Preço Unit." sortKey="preco_unit" currentKey={sortKey} currentDir={sortDir} align="right" onClick={handleSort} />
+                <SortableTh label="ORC" sortKey="orc" stack={sortStack} onClick={handleSort} />
+                <SortableTh label="Data" sortKey="date" stack={sortStack} onClick={handleSort} />
+                <SortableTh label="Descrição" sortKey="descricao" stack={sortStack} onClick={handleSort} />
+                <SortableTh label="Medida" sortKey="medida" stack={sortStack} onClick={handleSort} />
+                <SortableTh label="Quant." sortKey="quant" stack={sortStack} align="right" onClick={handleSort} />
+                <SortableTh label="Preço Unit." sortKey="preco_unit" stack={sortStack} align="right" onClick={handleSort} />
               </tr>
             </thead>
             <tbody>
