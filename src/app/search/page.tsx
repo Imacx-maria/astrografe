@@ -79,13 +79,15 @@ function rankByRelevance(results: SearchResult[], query: string): SearchResult[]
 
 // "IDEM" rows reference the previous distinct item in the same quote.
 // Propagate the first real description so rows stay meaningful when sorted.
-function resolveIdem(items: LineItem[]): { descricao: string; medida: string | null | undefined; quant: string; preco_unit: string }[] {
+function resolveIdem(items: LineItem[], fallbackDescricao: string): { descricao: string; medida: string | null | undefined; quant: string; preco_unit: string }[] {
   const isIdemStr = (s: string) => /^\s*ide\s*m\s*$/i.test(s);
   const firstReal = items.find((item) => !isIdemStr(item.descricao));
+  const baseDescricao = firstReal?.descricao ?? fallbackDescricao;
+  const baseMedida = firstReal ? (firstReal.medida ?? extractMedida(firstReal.descricao)) : extractMedida(fallbackDescricao);
   return items.map((item) => {
     const isIdem = isIdemStr(item.descricao);
-    const descricao = isIdem && firstReal ? firstReal.descricao : item.descricao;
-    const medida = isIdem && firstReal ? (firstReal.medida ?? extractMedida(firstReal.descricao)) : (item.medida ?? extractMedida(item.descricao));
+    const descricao = isIdem ? baseDescricao : item.descricao;
+    const medida = isIdem ? baseMedida : (item.medida ?? extractMedida(item.descricao));
     return { descricao, medida, quant: item.quant, preco_unit: item.preco_unit };
   });
 }
@@ -97,7 +99,7 @@ function flattenResults(results: SearchResult[], query: string): FlatRow[] {
     if (!r.line_items || r.line_items.length === 0) continue;
     const orc = getOrc(r);
     const date = getDate(r);
-    for (const item of resolveIdem(r.line_items)) {
+    for (const item of resolveIdem(r.line_items, r.descricao)) {
       rows.push({ _id: r._id, orc, date, descricao: item.descricao, medida: item.medida ?? "—", quant: item.quant, preco_unit: item.preco_unit });
     }
   }
