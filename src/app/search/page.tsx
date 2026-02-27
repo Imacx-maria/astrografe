@@ -80,9 +80,10 @@ function rankByRelevance(results: SearchResult[], query: string): SearchResult[]
 // "IDEM" rows reference the previous distinct item in the same quote.
 // Propagate the first real description so rows stay meaningful when sorted.
 function resolveIdem(items: LineItem[]): { descricao: string; medida: string | null | undefined; quant: string; preco_unit: string }[] {
-  const firstReal = items.find((item) => !/^\s*idem\s*$/i.test(item.descricao));
+  const isIdemStr = (s: string) => /^\s*ide\s*m\s*$/i.test(s);
+  const firstReal = items.find((item) => !isIdemStr(item.descricao));
   return items.map((item) => {
-    const isIdem = /^\s*idem\s*$/i.test(item.descricao);
+    const isIdem = isIdemStr(item.descricao);
     const descricao = isIdem && firstReal ? firstReal.descricao : item.descricao;
     const medida = isIdem && firstReal ? (firstReal.medida ?? extractMedida(firstReal.descricao)) : (item.medida ?? extractMedida(item.descricao));
     return { descricao, medida, quant: item.quant, preco_unit: item.preco_unit };
