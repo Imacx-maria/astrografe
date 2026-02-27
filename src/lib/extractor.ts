@@ -4,6 +4,7 @@ import { SYSTEM_PROMPT, buildUserPrompt } from "./prompts/extract-descricao";
 
 export interface LineItem {
   descricao: string;
+  medida?: string | null;
   quant: string;
   preco_unit: string;
 }
@@ -49,13 +50,20 @@ export function parseExtractionResponse(raw: string): ParsedJSON {
     : [];
 
   const line_items: LineItem[] = Array.isArray(obj.line_items)
-    ? (obj.line_items as LineItem[]).filter(
-        (item) =>
-          typeof item === "object" &&
-          typeof item.descricao === "string" &&
-          typeof item.quant === "string" &&
-          typeof item.preco_unit === "string"
-      )
+    ? (obj.line_items as LineItem[])
+        .filter(
+          (item) =>
+            typeof item === "object" &&
+            typeof item.descricao === "string" &&
+            typeof item.quant === "string" &&
+            typeof item.preco_unit === "string"
+        )
+        .map((item) => ({
+          descricao: item.descricao,
+          medida: typeof item.medida === "string" && item.medida ? item.medida : undefined,
+          quant: item.quant,
+          preco_unit: item.preco_unit,
+        }))
     : [];
 
   return { descricao: obj.descricao.trim(), confidence, warnings, line_items };

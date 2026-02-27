@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../convex/_generated/api";
-import { normalizeText } from "@/lib/normalizer";
+import { normalizeText, stripAccents } from "@/lib/normalizer";
 import { extractDescricao } from "@/lib/extractor";
 import { createEmbedding } from "@/lib/openrouter";
 import { ModelPool } from "@/lib/circuit-breaker";
@@ -66,10 +66,11 @@ export async function POST(req: NextRequest) {
     // 3. Extract descrição via LLM
     const extraction = await extractDescricao(normalized, config.openrouterApiKey, modelPool);
 
-    // 4. Store parsed quote
+    // 4. Store parsed quote (include accent-normalized descricao for search)
     const parsedId = await convex.mutation(api.quotes.insertParsed, {
       raw_id: rawId,
       descricao: extraction.descricao,
+      descricao_normalized: stripAccents(extraction.descricao).toLowerCase(),
       confidence: extraction.confidence,
       model_used: extraction.model_used,
       parse_warnings: extraction.warnings,

@@ -1,3 +1,7 @@
+export function stripAccents(text: string): string {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 const SENTENCE_ENDERS = /[.;:?!]$/;
 const UPPERCASE_START = /^[A-ZÁÀÃÂÉÊÍÓÔÕÚÇ]/;
 const SOFT_HYPHEN = /-\n/g;

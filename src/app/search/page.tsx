@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 interface LineItem {
   descricao: string;
+  medida?: string | null;
   quant: string;
   preco_unit: string;
 }
@@ -24,12 +25,29 @@ interface FlatRow {
   orc: string;
   date: string;
   descricao: string;
+  medida: string;
   quant: string;
   preco_unit: string;
 }
 
-type SortKey = "orc" | "date" | "descricao" | "quant" | "preco_unit";
+type SortKey = "orc" | "date" | "descricao" | "medida" | "quant" | "preco_unit";
 type SortDir = "asc" | "desc";
+
+// Regex fallback: extract first measurement from a description string
+function extractMedida(text: string): string {
+  // Dimension: "12.5 x 13 cm", "24.5X24.5", "1,9 x 1,8 m", "187 x 293cm"
+  const dim = text.match(
+    /(\d+[.,]?\d*)\s*[xX×]\s*(\d+[.,]?\d*)\s*(cm|mm|m\b|ft\.?|pol\.?)?/i
+  );
+  if (dim) {
+    const unit = dim[3] ? " " + dim[3].replace(/\.$/, "").toLowerCase() : "";
+    return `${dim[1]} x ${dim[2]}${unit}`.trim();
+  }
+  // Paper format: A3, A4, A5, A0, A1, A2
+  const paper = text.match(/\b(A[0-5])\b/i);
+  if (paper) return paper[1].toUpperCase();
+  return "—";
+}
 
 function getOrc(r: SearchResult) {
   if (r.orc_number) return r.orc_number;
@@ -59,6 +77,18 @@ function rankByRelevance(results: SearchResult[], query: string): SearchResult[]
   });
 }
 
+// "IDEM" rows reference the previous distinct item in the same quote.
+// Propagate the first real description so rows stay meaningful when sorted.
+function resolveIdem(items: LineItem[]): { descricao: string; medida: string | null | undefined; quant: string; preco_unit: string }[] {
+  const firstReal = items.find((item) => !/^\s*idem\s*$/i.test(item.descricao));
+  return items.map((item) => {
+    const isIdem = /^\s*idem\s*$/i.test(item.descricao);
+    const descricao = isIdem && firstReal ? firstReal.descricao : item.descricao;
+    const medida = isIdem && firstReal ? (firstReal.medida ?? extractMedida(firstReal.descricao)) : (item.medida ?? extractMedida(item.descricao));
+    return { descricao, medida, quant: item.quant, preco_unit: item.preco_unit };
+  });
+}
+
 function flattenResults(results: SearchResult[], query: string): FlatRow[] {
   const ranked = rankByRelevance(results, query);
   const rows: FlatRow[] = [];
@@ -66,15 +96,8 @@ function flattenResults(results: SearchResult[], query: string): FlatRow[] {
     if (!r.line_items || r.line_items.length === 0) continue;
     const orc = getOrc(r);
     const date = getDate(r);
-    for (const item of r.line_items) {
-      rows.push({
-        _id: r._id,
-        orc,
-        date,
-        descricao: item.descricao,
-        quant: item.quant,
-        preco_unit: item.preco_unit,
-      });
+    for (const item of resolveIdem(r.line_items)) {
+      rows.push({ _id: r._id, orc, date, descricao: item.descricao, medida: item.medida ?? "—", quant: item.quant, preco_unit: item.preco_unit });
     }
   }
   return rows;
@@ -102,21 +125,14 @@ function SortableTh({ label, sortKey, currentKey, currentDir, align = "left", on
   const isActive = currentKey === sortKey;
   return (
     <th
-      className={cn(
-        "px-4 py-2 cursor-pointer select-none",
-        align === "right" ? "text-right" : "text-left"
-      )}
+      className={cn("px-4 py-2 cursor-pointer select-none", align === "right" ? "text-right" : "text-left")}
       onClick={() => onClick(sortKey)}
     >
       <div className={cn("flex items-center gap-1", align === "right" ? "justify-end" : "justify-start")}>
         <span>{label}</span>
         <span className="inline-block w-3 h-3 ml-1 flex-shrink-0">
           {isActive ? (
-            currentDir === "asc" ? (
-              <ArrowUp className="h-3 w-3" />
-            ) : (
-              <ArrowDown className="h-3 w-3" />
-            )
+            currentDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
           ) : null}
         </span>
       </div>
@@ -129,8 +145,8 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("orc");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,6 +221,7 @@ export default function SearchPage() {
                 <SortableTh label="ORC" sortKey="orc" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
                 <SortableTh label="Data" sortKey="date" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
                 <SortableTh label="Descrição" sortKey="descricao" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
+                <SortableTh label="Medida" sortKey="medida" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
                 <SortableTh label="Quant." sortKey="quant" currentKey={sortKey} currentDir={sortDir} align="right" onClick={handleSort} />
                 <SortableTh label="Preço Unit." sortKey="preco_unit" currentKey={sortKey} currentDir={sortDir} align="right" onClick={handleSort} />
               </tr>
@@ -215,6 +232,7 @@ export default function SearchPage() {
                   <td className="px-4 py-2 whitespace-nowrap text-muted-foreground">{row.orc}</td>
                   <td className="px-4 py-2 whitespace-nowrap text-muted-foreground">{row.date}</td>
                   <td className="px-4 py-2">{row.descricao}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{row.medida}</td>
                   <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap">{row.quant}</td>
                   <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap">{row.preco_unit}</td>
                 </tr>

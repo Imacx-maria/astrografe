@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { FolderOpen } from "lucide-react";
 
 type FileStatus = "queued" | "processing" | "done" | "error" | "duplicate";
 
@@ -19,17 +20,28 @@ interface QueueItem {
   error?: string;
 }
 
-const STATUS_COLORS: Record<FileStatus, string> = {
-  queued: "bg-neutral-100 text-neutral-600",
-  processing: "bg-blue-100 text-blue-700",
-  done: "bg-green-100 text-green-700",
-  error: "bg-red-100 text-red-700",
-  duplicate: "bg-yellow-100 text-yellow-700",
+const STATUS_LABEL: Record<FileStatus, string> = {
+  queued: "Queued",
+  processing: "Processing",
+  done: "Done",
+  error: "Error",
+  duplicate: "Duplicate",
 };
+
+const STATUS_COLORS: Record<FileStatus, string> = {
+  queued:     "bg-muted text-muted-foreground",
+  processing: "bg-status-info-muted text-status-info-foreground",
+  done:       "bg-status-success-muted text-status-success-foreground",
+  error:      "bg-status-error-muted text-status-error-foreground",
+  duplicate:  "bg-primary text-primary-foreground",
+};
+
+const SUPPORTED_EXT = new Set(["pdf", "txt", "eml", "msg"]);
 
 export default function IngestPage() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef  = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const updateItem = (id: string, patch: Partial<QueueItem>) =>
     setQueue((q) =>
@@ -49,20 +61,17 @@ export default function IngestPage() {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        pages.push(
-          content.items
-            .map((item) => ("str" in item ? item.str : ""))
-            .join(" ")
-        );
+        pages.push(content.items.map((item) => ("str" in item ? item.str : "")).join(" "));
       }
       return pages.join("\n");
     }
     return file.text();
   };
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files) return;
-    const newItems: QueueItem[] = Array.from(files).map((f) => ({
+  const processFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+
+    const newItems: QueueItem[] = files.map((f) => ({
       id: crypto.randomUUID(),
       name: f.name,
       status: "queued",
@@ -98,62 +107,98 @@ export default function IngestPage() {
     }
   };
 
+  const handleFileInput = (files: FileList | null) => {
+    if (!files) return;
+    processFiles(Array.from(files));
+  };
+
+  const handleFolderInput = (files: FileList | null) => {
+    if (!files) return;
+    // Filter to supported extensions only (webkitdirectory ignores accept attr)
+    const filtered = Array.from(files).filter((f) => {
+      const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+      return SUPPORTED_EXT.has(ext);
+    });
+    processFiles(filtered);
+  };
+
   return (
     <main className="p-8 space-y-6">
-      <h1 className="text-2xl font-bold">Ingest Documents</h1>
+      <h1 className="text-2xl">Ingest Documents</h1>
 
+      {/* Drop zone — unchanged */}
       <div
-        className="border-2 border-dashed border-neutral-300 rounded-lg p-10 text-center cursor-pointer hover:border-blue-400 transition-colors"
-        onClick={() => inputRef.current?.click()}
+        className="border-2 border-dashed border-border p-10 text-center cursor-pointer hover:border-primary transition-colors"
+        onClick={() => fileInputRef.current?.click()}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
-          handleFiles(e.dataTransfer.files);
+          handleFileInput(e.dataTransfer.files);
         }}
       >
-        <p className="text-neutral-500">Drop files here or click to select</p>
-        <p className="text-xs text-neutral-400 mt-1">Supports TXT, EML, PDF text</p>
+        <p className="text-muted-foreground">Drop files here or click to select</p>
+        <p className="text-xs text-muted-foreground mt-1">Supports TXT, EML, PDF text</p>
         <input
-          ref={inputRef}
+          ref={fileInputRef}
           type="file"
           multiple
           accept=".txt,.eml,.pdf,.msg"
           className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
+          onChange={(e) => handleFileInput(e.target.files)}
         />
       </div>
 
+      {/* Folder upload */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => folderInputRef.current?.click()}
+          className="flex items-center gap-2 px-4 py-2 border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors text-sm"
+        >
+          <FolderOpen className="h-4 w-4" />
+          Choose Folder
+        </button>
+        <span className="text-xs text-muted-foreground">
+          Selects all PDF, TXT, EML and MSG files inside a folder
+        </span>
+        {/* webkitdirectory is non-standard — cast via data-attr trick */}
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          // @ts-expect-error webkitdirectory is non-standard but universally supported
+          webkitdirectory=""
+          onChange={(e) => handleFolderInput(e.target.files)}
+        />
+      </div>
+
+      {/* Queue */}
       {queue.length > 0 && (
         <ul className="space-y-2">
           {queue.map((item) => (
-            <li
-              key={item.id}
-              className="flex items-start gap-3 text-sm border rounded-lg p-3"
-            >
-              <span
-                className={`px-2 py-0.5 rounded text-xs font-medium shrink-0 ${STATUS_COLORS[item.status]}`}
-              >
-                {item.status}
+            <li key={item.id} className="flex items-start gap-3 text-sm imx-border p-3">
+              <span className={`px-2 py-0.5 text-xs shrink-0 ${STATUS_COLORS[item.status]}`}>
+                {STATUS_LABEL[item.status]}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{item.name}</p>
+                <p className="truncate">{item.name}</p>
                 {item.descricao && (
-                  <p className="text-neutral-500 text-xs mt-0.5 line-clamp-2">
+                  <p className="text-muted-foreground text-xs mt-0.5 line-clamp-2">
                     {item.descricao}
                   </p>
                 )}
                 {item.line_items && item.line_items.length > 0 && (
                   <table className="w-full text-xs border-collapse mt-1">
                     <thead>
-                      <tr className="text-left border-b text-neutral-400">
-                        <th className="py-1 pr-3 font-medium">Descrição</th>
-                        <th className="py-1 pr-3 font-medium w-16">Quant.</th>
-                        <th className="py-1 font-medium w-20">Preço Unit.</th>
+                      <tr className="text-left">
+                        <th className="py-1 pr-3">Descrição</th>
+                        <th className="py-1 pr-3 w-16">Quant.</th>
+                        <th className="py-1 w-20">Preço Unit.</th>
                       </tr>
                     </thead>
                     <tbody>
                       {item.line_items.map((li, j) => (
-                        <tr key={j} className="border-b border-neutral-100">
+                        <tr key={j} className="imx-border-b">
                           <td className="py-1 pr-3">{li.descricao}</td>
                           <td className="py-1 pr-3">{li.quant}</td>
                           <td className="py-1">{li.preco_unit}</td>
@@ -163,7 +208,7 @@ export default function IngestPage() {
                   </table>
                 )}
                 {item.error && (
-                  <p className="text-red-600 text-xs mt-0.5">{item.error}</p>
+                  <p className="text-status-error text-xs mt-0.5">{item.error}</p>
                 )}
               </div>
             </li>

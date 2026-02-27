@@ -14,6 +14,7 @@ export default defineSchema({
   quotes_parsed: defineTable({
     raw_id: v.id("quotes_raw"),
     descricao: v.string(),
+    descricao_normalized: v.optional(v.string()), // accent-stripped lowercase, for search
     confidence: v.number(), // 0–1
     model_used: v.string(),
     parse_warnings: v.array(v.string()),
@@ -23,10 +24,13 @@ export default defineSchema({
           descricao: v.string(),
           quant: v.string(),
           preco_unit: v.string(),
+          medida: v.optional(v.string()), // extracted measurement e.g. "12.5 x 13 cm"
         })
       )
     ),
-  }).searchIndex("search_descricao", { searchField: "descricao" }),
+  })
+    .searchIndex("search_descricao", { searchField: "descricao" })
+    .searchIndex("search_descricao_norm", { searchField: "descricao_normalized" }),
 
   quote_embeddings: defineTable({
     parsed_id: v.id("quotes_parsed"),
