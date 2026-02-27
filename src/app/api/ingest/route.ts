@@ -74,7 +74,10 @@ export async function POST(req: NextRequest) {
       confidence: extraction.confidence,
       model_used: extraction.model_used,
       parse_warnings: extraction.warnings,
-      line_items: extraction.line_items,
+      line_items: extraction.line_items.map((item) => ({
+        ...item,
+        medida: item.medida ?? undefined,
+      })),
     });
 
     // 5. Embed descrição (best-effort — failure does not block ingest)
