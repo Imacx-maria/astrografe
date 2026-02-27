@@ -167,6 +167,13 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sortStack, setSortStack] = useState<SortEntry[]>(DEFAULT_SORT);
+  const [yearFilter, setYearFilter] = useState<string | null>(null);
+
+  const YEAR_FILTERS = [
+    String(new Date().getFullYear()),
+    String(new Date().getFullYear() - 1),
+    String(new Date().getFullYear() - 2),
+  ];
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -216,8 +223,9 @@ export default function SearchPage() {
 
   const rows = useMemo(() => {
     const flat = flattenResults(results, query);
-    return sortRows(flat, sortStack);
-  }, [results, query, sortStack]);
+    const filtered = yearFilter ? flat.filter((r) => r.date.startsWith(yearFilter)) : flat;
+    return sortRows(filtered, sortStack);
+  }, [results, query, sortStack, yearFilter]);
 
   return (
     <main className="p-8 space-y-6">
@@ -248,6 +256,23 @@ export default function SearchPage() {
           {loading ? "A pesquisar…" : "Pesquisar"}
         </button>
       </form>
+
+      <div className="flex gap-2">
+        {YEAR_FILTERS.map((year) => (
+          <button
+            key={year}
+            onClick={() => setYearFilter(yearFilter === year ? null : year)}
+            className={cn(
+              "px-4 py-1.5 text-sm border transition-colors",
+              yearFilter === year
+                ? "bg-primary text-primary-foreground border-primary"
+                : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            )}
+          >
+            {year}
+          </button>
+        ))}
+      </div>
 
       {error && (
         <p className="text-sm text-status-error bg-status-error-muted border border-status-error px-4 py-2">
