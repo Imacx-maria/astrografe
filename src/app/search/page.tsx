@@ -28,9 +28,10 @@ interface FlatRow {
   medida: string;
   quant: string;
   preco_unit: string;
+  relevance: number;
 }
 
-type SortKey = "orc" | "date" | "descricao" | "medida" | "quant" | "preco_unit";
+type SortKey = "relevance" | "orc" | "date" | "descricao" | "medida" | "quant" | "preco_unit";
 type SortDir = "asc" | "desc";
 
 // Regex fallback: extract first measurement from a description string
@@ -67,14 +68,8 @@ function getDate(r: SearchResult) {
   return "—";
 }
 
-function rankByRelevance(results: SearchResult[], query: string): SearchResult[] {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (words.length <= 1) return results;
-  return [...results].sort((a, b) => {
-    const scoreA = words.filter((w) => a.descricao.toLowerCase().includes(w)).length;
-    const scoreB = words.filter((w) => b.descricao.toLowerCase().includes(w)).length;
-    return scoreB - scoreA;
-  });
+function scoreResult(result: SearchResult, words: string[]): number {
+  return words.filter((w) => result.descricao.toLowerCase().includes(w)).length;
 }
 
 // "IDEM" rows reference the previous distinct item in the same quote.
@@ -93,14 +88,15 @@ function resolveIdem(items: LineItem[], fallbackDescricao: string): { descricao:
 }
 
 function flattenResults(results: SearchResult[], query: string): FlatRow[] {
-  const ranked = rankByRelevance(results, query);
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const rows: FlatRow[] = [];
-  for (const r of ranked) {
+  for (const r of results) {
     if (!r.line_items || r.line_items.length === 0) continue;
     const orc = getOrc(r);
     const date = getDate(r);
+    const relevance = scoreResult(r, words);
     for (const item of resolveIdem(r.line_items, r.descricao)) {
-      rows.push({ _id: r._id, orc, date, descricao: item.descricao, medida: item.medida ?? "—", quant: item.quant, preco_unit: item.preco_unit });
+      rows.push({ _id: r._id, orc, date, descricao: item.descricao, medida: item.medida ?? "—", quant: item.quant, preco_unit: item.preco_unit, relevance });
     }
   }
   return rows;
@@ -108,9 +104,15 @@ function flattenResults(results: SearchResult[], query: string): FlatRow[] {
 
 function sortRows(rows: FlatRow[], key: SortKey, dir: SortDir): FlatRow[] {
   return [...rows].sort((a, b) => {
+    if (key === "relevance") {
+      const cmp = b.relevance - a.relevance;
+      if (cmp !== 0) return cmp;
+      // tiebreak: most recent date first
+      return b.date.localeCompare(a.date, "pt", { sensitivity: "base" });
+    }
     const av = a[key] ?? "";
     const bv = b[key] ?? "";
-    const cmp = av.localeCompare(bv, "pt", { numeric: true, sensitivity: "base" });
+    const cmp = String(av).localeCompare(String(bv), "pt", { numeric: true, sensitivity: "base" });
     return dir === "asc" ? cmp : -cmp;
   });
 }
@@ -148,7 +150,7 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortKey, setSortKey] = useState<SortKey>("relevance");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -158,6 +160,8 @@ export default function SearchPage() {
     setLoading(true);
     setError(null);
     setResults([]);
+    setSortKey("relevance");
+    setSortDir("desc");
 
     try {
       const res = await fetch("/api/search", {
