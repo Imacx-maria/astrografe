@@ -16,8 +16,8 @@ export interface ParsedJSON {
 }
 
 export function parseExtractionResponse(raw: string): ParsedJSON {
-  // Strip markdown code blocks if present
-  const cleaned = raw.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/, "").trim();
+  // Strip markdown code blocks if present (trim first to handle leading whitespace/newlines)
+  const cleaned = raw.trim().replace(/^\s*```(?:json)?\s*\n?/i, "").replace(/\n?\s*```\s*$/, "").trim();
 
   let parsed: unknown;
   try {
@@ -52,9 +52,7 @@ export async function extractDescricao(
   apiKey: string,
   pool: ModelPool
 ): Promise<ExtractionResult> {
-  // Access private field via type assertion for max attempts calculation
-  const modelCount = (pool as unknown as { models: string[] }).models.length;
-  const MAX_ATTEMPTS = modelCount + 1;
+  const MAX_ATTEMPTS = pool.size + 1;
 
   let lastError: Error | null = null;
 
@@ -80,7 +78,15 @@ export async function extractDescricao(
         continue; // try next model
       }
 
-      // Non-retryable (bad JSON, auth error): still try next model once
+      // OpenRouter error that's non-retryable (auth/bad-request): record failure so
+      // the circuit breaker tracks the broken model, then try next model once.
+      if (err instanceof OpenRouterError) {
+        pool.recordFailure(modelId);
+        if (attempt === 0) continue;
+        throw err;
+      }
+
+      // Parse error (bad JSON from LLM): try next model once without penalising the circuit breaker
       if (attempt === 0) continue;
       throw err;
     }

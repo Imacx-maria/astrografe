@@ -16,6 +16,12 @@ describe("parseExtractionResponse", () => {
     expect(result.descricao).toBe("Pasta A4");
   });
 
+  it("parses JSON with leading whitespace before markdown fence", () => {
+    const raw = "\n```json\n{\"descricao\": \"Caixa kraft\", \"confidence\": 0.7, \"warnings\": []}\n```";
+    const result = parseExtractionResponse(raw);
+    expect(result.descricao).toBe("Caixa kraft");
+  });
+
   it("throws on missing descricao field", () => {
     const raw = `{"confidence": 0.9, "warnings": []}`;
     expect(() => parseExtractionResponse(raw)).toThrow("missing descricao");

@@ -55,4 +55,8 @@ export class ModelPool {
   recordFailure(modelId: string) {
     this.breakers.get(modelId)?.recordFailure();
   }
+
+  get size(): number {
+    return this.models.length;
+  }
 }
