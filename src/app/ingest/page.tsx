@@ -2,13 +2,20 @@
 
 import { useRef, useState } from "react";
 
-type FileStatus = "queued" | "processing" | "done" | "error";
+type FileStatus = "queued" | "processing" | "done" | "error" | "duplicate";
+
+interface LineItem {
+  descricao: string;
+  quant: string;
+  preco_unit: string;
+}
 
 interface QueueItem {
   id: string;
   name: string;
   status: FileStatus;
   descricao?: string;
+  line_items?: LineItem[];
   error?: string;
 }
 
@@ -17,6 +24,7 @@ const STATUS_COLORS: Record<FileStatus, string> = {
   processing: "bg-blue-100 text-blue-700",
   done: "bg-green-100 text-green-700",
   error: "bg-red-100 text-red-700",
+  duplicate: "bg-yellow-100 text-yellow-700",
 };
 
 export default function IngestPage() {
@@ -27,6 +35,30 @@ export default function IngestPage() {
     setQueue((q) =>
       q.map((item) => (item.id === id ? { ...item, ...patch } : item))
     );
+
+  const extractText = async (file: File): Promise<string> => {
+    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+      const pdfjs = await import("pdfjs-dist");
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/build/pdf.worker.mjs",
+        import.meta.url
+      ).toString();
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+      const pages: string[] = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        pages.push(
+          content.items
+            .map((item) => ("str" in item ? item.str : ""))
+            .join(" ")
+        );
+      }
+      return pages.join("\n");
+    }
+    return file.text();
+  };
 
   const handleFiles = async (files: FileList | null) => {
     if (!files) return;
@@ -43,7 +75,7 @@ export default function IngestPage() {
       updateItem(item.id, { status: "processing" });
 
       try {
-        const raw_text = await file.text();
+        const raw_text = await extractText(file);
         const source_type = file.name.split(".").pop()?.toLowerCase() ?? "txt";
 
         const res = await fetch("/api/ingest", {
@@ -53,9 +85,13 @@ export default function IngestPage() {
         });
 
         const data = await res.json();
+        if (res.status === 409) {
+          updateItem(item.id, { status: "duplicate", descricao: `Already ingested (${data.orc_number})` });
+          continue;
+        }
         if (!res.ok) throw new Error(data.error ?? "Unknown error");
 
-        updateItem(item.id, { status: "done", descricao: data.descricao });
+        updateItem(item.id, { status: "done", descricao: data.descricao, line_items: data.line_items ?? [] });
       } catch (err) {
         updateItem(item.id, { status: "error", error: (err as Error).message });
       }
@@ -63,7 +99,7 @@ export default function IngestPage() {
   };
 
   return (
-    <main className="max-w-3xl mx-auto p-8 space-y-6">
+    <main className="p-8 space-y-6">
       <h1 className="text-2xl font-bold">Ingest Documents</h1>
 
       <div
@@ -105,6 +141,26 @@ export default function IngestPage() {
                   <p className="text-neutral-500 text-xs mt-0.5 line-clamp-2">
                     {item.descricao}
                   </p>
+                )}
+                {item.line_items && item.line_items.length > 0 && (
+                  <table className="w-full text-xs border-collapse mt-1">
+                    <thead>
+                      <tr className="text-left border-b text-neutral-400">
+                        <th className="py-1 pr-3 font-medium">Descrição</th>
+                        <th className="py-1 pr-3 font-medium w-16">Quant.</th>
+                        <th className="py-1 font-medium w-20">Preço Unit.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {item.line_items.map((li, j) => (
+                        <tr key={j} className="border-b border-neutral-100">
+                          <td className="py-1 pr-3">{li.descricao}</td>
+                          <td className="py-1 pr-3">{li.quant}</td>
+                          <td className="py-1">{li.preco_unit}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
                 {item.error && (
                   <p className="text-red-600 text-xs mt-0.5">{item.error}</p>

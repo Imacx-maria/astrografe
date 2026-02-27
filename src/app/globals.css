@@ -1,26 +1,308 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Class-based dark mode for Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ============================================
+   LOCAL FONTS
+   ============================================ */
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMono%5Bwght%5D.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
 }
+
+/* ============================================
+   CSS VARIABLES — LIGHT MODE
+   ============================================ */
+
+:root {
+  --background: oklch(0.9 0.01 95.04 / 1);
+  --foreground: oklch(0% 0 0);
+  --border: oklch(0% 0 0);
+  --border-width: 1px;
+
+  --primary: oklch(84.08% 0.1725 84.2);
+  --primary-foreground: oklch(0% 0 0);
+  --secondary: oklch(0.8947 0.0111 95.18);
+  --secondary-foreground: oklch(0% 0 0);
+  --muted: oklch(0.8947 0.0111 95.18);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.8947 0.0111 95.18);
+  --accent-foreground: oklch(0% 0 0);
+  --destructive: oklch(0.63 0.23 25);
+  --destructive-foreground: oklch(0% 0 0);
+  --input: oklch(0.87 0.03 83.3 / 0.3);
+  --ring: oklch(0% 0 0);
+  --card: oklch(0.94 0.01 95.04);
+  --card-foreground: oklch(0% 0 0);
+  --popover: oklch(0.94 0.01 95.04);
+  --popover-foreground: oklch(0% 0 0);
+  --radius: 0px;
+
+  --status-success: oklch(0.55 0.15 145);
+  --status-success-muted: oklch(0.55 0.15 145 / 0.12);
+  --status-success-foreground: oklch(0.35 0.1 145);
+  --status-warning: oklch(0.75 0.15 85);
+  --status-warning-muted: oklch(0.75 0.15 85 / 0.15);
+  --status-warning-foreground: oklch(0.4 0.1 85);
+  --status-error: oklch(0.55 0.2 25);
+  --status-error-muted: oklch(0.55 0.2 25 / 0.12);
+  --status-error-foreground: oklch(0.4 0.15 25);
+  --status-info: oklch(0.55 0.12 250);
+  --status-info-muted: oklch(0.55 0.12 250 / 0.12);
+  --status-info-foreground: oklch(0.35 0.08 250);
+
+  color-scheme: light;
+}
+
+/* ============================================
+   CSS VARIABLES — DARK MODE
+   ============================================ */
+
+.dark {
+  --background: oklch(0.24 0 0);
+  --foreground: oklch(0.85 0 0);
+  --border: oklch(0.5 0 0);
+  --border-width: 1px;
+
+  --primary: oklch(84.08% 0.1725 84.2);
+  --primary-foreground: oklch(0% 0 0);
+  --secondary: oklch(0.26 0 0 / 87%);
+  --secondary-foreground: oklch(0.85 0 0);
+  --muted: oklch(0.24 0 0 / 87%);
+  --muted-foreground: oklch(0.65 0 0);
+  --accent: oklch(0.26 0 0);
+  --accent-foreground: oklch(0.85 0 0);
+  --destructive: oklch(0.63 0.23 25);
+  --destructive-foreground: oklch(0% 0 0);
+  --input: oklch(0.28 0 0);
+  --ring: oklch(0.85 0 0);
+  --card: oklch(0.31 0 0);
+  --card-foreground: oklch(0.85 0 0);
+  --popover: oklch(0.31 0 0);
+  --popover-foreground: oklch(0.85 0 0);
+
+  --status-success: oklch(0.65 0.15 145);
+  --status-success-muted: oklch(0.65 0.15 145 / 0.2);
+  --status-success-foreground: oklch(0.8 0.1 145);
+  --status-warning: oklch(0.75 0.15 85);
+  --status-warning-muted: oklch(0.75 0.15 85 / 0.2);
+  --status-warning-foreground: oklch(0.9 0.08 85);
+  --status-error: oklch(0.65 0.2 25);
+  --status-error-muted: oklch(0.65 0.2 25 / 0.2);
+  --status-error-foreground: oklch(0.85 0.12 25);
+  --status-info: oklch(0.65 0.12 250);
+  --status-info-muted: oklch(0.65 0.12 250 / 0.2);
+  --status-info-foreground: oklch(0.85 0.08 250);
+
+  color-scheme: dark;
+}
+
+/* ============================================
+   TAILWIND V4 THEME TOKENS — mapped from CSS vars
+   ============================================ */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --font-sans: 'Geist Mono', monospace;
+  --font-mono: 'Geist Mono', monospace;
+  --radius: 0px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ============================================
+   UNIVERSAL DESIGN RULES
+   ============================================ */
+
+@layer base {
+  /* Geist Mono everywhere */
+  * {
+    font-family: 'Geist Mono', monospace !important;
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  html {
+    font-size: 14.4px;
+  }
+
+  body,
+  body * {
+    font-size: 0.9rem !important;
+  }
+
+  body h1,
+  body h2,
+  body h3,
+  body h4,
+  body h5,
+  body h6 {
+    font-size: 1.4rem !important;
+  }
+
+  /* ALL TEXT UPPERCASE */
+  * {
+    text-transform: uppercase !important;
+  }
+
+  /* NO BOLD TEXT */
+  * {
+    font-weight: 400 !important;
+  }
+
+  /* NO ROUNDED CORNERS */
+  * {
+    border-radius: 0 !important;
+  }
+
+  /* NO OUTLINES */
+  *,
+  *:focus,
+  *:focus-visible {
+    outline: none !important;
+  }
+
+  /* Base colors */
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  /* ============================================
+     BORDER SYSTEM
+     ============================================ */
+
+  .imx-border {
+    border-style: solid !important;
+    border-color: var(--border) !important;
+    border-width: var(--border-width) !important;
+  }
+
+  .imx-border-b {
+    border-bottom-style: solid !important;
+    border-bottom-color: var(--border) !important;
+    border-bottom-width: var(--border-width) !important;
+  }
+
+  .imx-border-t {
+    border-top-style: solid !important;
+    border-top-color: var(--border) !important;
+    border-top-width: var(--border-width) !important;
+  }
+
+  .imx-border-r {
+    border-right-style: solid !important;
+    border-right-color: var(--border) !important;
+    border-right-width: var(--border-width) !important;
+  }
+
+  .imx-border-l {
+    border-left-style: solid !important;
+    border-left-color: var(--border) !important;
+    border-left-width: var(--border-width) !important;
+  }
+
+  /* ============================================
+     TABLE HEADERS — yellow bg, always black text
+     ============================================ */
+
+  th,
+  th *,
+  th:hover,
+  th:hover *,
+  .dark th,
+  .dark th *,
+  .dark th:hover,
+  .dark th:hover * {
+    background-color: var(--primary) !important;
+    color: oklch(0% 0 0) !important;
+  }
+
+  th {
+    height: 2.5rem !important;
+    min-height: 2.5rem !important;
+  }
+
+  table {
+    border-collapse: collapse;
+    border-spacing: 0;
+  }
+
+  th,
+  td {
+    border-right: none !important;
+    border-left: none !important;
+    border-color: var(--border) !important;
+  }
+
+  /* ============================================
+     INPUTS
+     ============================================ */
+
+  input[type='text'],
+  input[type='number'],
+  input[type='email'],
+  input[type='password'],
+  input[type='search'],
+  input:not([type]),
+  textarea {
+    background-color: var(--input) !important;
+    border-style: solid !important;
+    border-color: var(--border) !important;
+    border-width: var(--border-width) !important;
+    color: var(--foreground) !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  /* ============================================
+     TABLE ROW HOVER
+     ============================================ */
+
+  tr:hover,
+  tbody tr:hover {
+    background-color: var(--accent) !important;
+  }
+
+  .dark tr:hover > td {
+    color: var(--accent-foreground) !important;
+  }
+
+  /* ============================================
+     DARK MODE — NAV
+     ============================================ */
+
+  .dark nav button:not(.bg-primary):not(:hover),
+  .dark nav a:not(.bg-primary):not(:hover) {
+    color: var(--muted-foreground) !important;
+  }
+
+  .dark nav button:not(.bg-primary):hover,
+  .dark nav a:not(.bg-primary):hover {
+    color: var(--accent-foreground) !important;
+  }
+
+  .dark nav .bg-primary,
+  .dark nav .bg-primary * {
+    color: var(--primary-foreground) !important;
+  }
 }

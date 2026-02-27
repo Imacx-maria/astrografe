@@ -2,17 +2,25 @@ import { ModelPool } from "./circuit-breaker";
 import { chatCompletion, OpenRouterError } from "./openrouter";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompts/extract-descricao";
 
+export interface LineItem {
+  descricao: string;
+  quant: string;
+  preco_unit: string;
+}
+
 export interface ExtractionResult {
   descricao: string;
   confidence: number;
   warnings: string[];
   model_used: string;
+  line_items: LineItem[];
 }
 
 export interface ParsedJSON {
   descricao: string;
   confidence: number;
   warnings: string[];
+  line_items: LineItem[];
 }
 
 export function parseExtractionResponse(raw: string): ParsedJSON {
@@ -40,7 +48,17 @@ export function parseExtractionResponse(raw: string): ParsedJSON {
     ? (obj.warnings as string[]).filter((w) => typeof w === "string")
     : [];
 
-  return { descricao: obj.descricao.trim(), confidence, warnings };
+  const line_items: LineItem[] = Array.isArray(obj.line_items)
+    ? (obj.line_items as LineItem[]).filter(
+        (item) =>
+          typeof item === "object" &&
+          typeof item.descricao === "string" &&
+          typeof item.quant === "string" &&
+          typeof item.preco_unit === "string"
+      )
+    : [];
+
+  return { descricao: obj.descricao.trim(), confidence, warnings, line_items };
 }
 
 export function isRetryableModel(status: number): boolean {
@@ -64,7 +82,7 @@ export async function extractDescricao(
       const response = await chatCompletion(apiKey, modelId, [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: buildUserPrompt(normalizedText) },
-      ], { response_format: { type: "json_object" } });
+      ]);
 
       const parsed = parseExtractionResponse(response.content);
       pool.recordSuccess(modelId);

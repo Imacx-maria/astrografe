@@ -1,13 +1,127 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { ArrowUp, ArrowDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface LineItem {
+  descricao: string;
+  quant: string;
+  preco_unit: string;
+}
 
 interface SearchResult {
-  _score: number;
+  _id: string;
   descricao: string;
-  confidence: number;
-  model_used: string;
-  source_path: string;
+  line_items: LineItem[];
+  quote_date: string | null;
+  orc_number: string | null;
+  source_path: string | null;
+}
+
+interface FlatRow {
+  _id: string;
+  orc: string;
+  date: string;
+  descricao: string;
+  quant: string;
+  preco_unit: string;
+}
+
+type SortKey = "orc" | "date" | "descricao" | "quant" | "preco_unit";
+type SortDir = "asc" | "desc";
+
+function getOrc(r: SearchResult) {
+  if (r.orc_number) return r.orc_number;
+  if (r.source_path) {
+    const m = r.source_path.match(/ORC_(\d{5,9}-\d+)/);
+    return m ? `ORC_${m[1]}` : r.source_path;
+  }
+  return "—";
+}
+
+function getDate(r: SearchResult) {
+  if (r.quote_date) return r.quote_date;
+  if (r.source_path) {
+    const m = r.source_path.match(/^(\d{4})(\d{2})(\d{2})_/);
+    return m ? `${m[1]}-${m[2]}-${m[3]}` : "—";
+  }
+  return "—";
+}
+
+function rankByRelevance(results: SearchResult[], query: string): SearchResult[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length <= 1) return results;
+  return [...results].sort((a, b) => {
+    const scoreA = words.filter((w) => a.descricao.toLowerCase().includes(w)).length;
+    const scoreB = words.filter((w) => b.descricao.toLowerCase().includes(w)).length;
+    return scoreB - scoreA;
+  });
+}
+
+function flattenResults(results: SearchResult[], query: string): FlatRow[] {
+  const ranked = rankByRelevance(results, query);
+  const rows: FlatRow[] = [];
+  for (const r of ranked) {
+    if (!r.line_items || r.line_items.length === 0) continue;
+    const orc = getOrc(r);
+    const date = getDate(r);
+    for (const item of r.line_items) {
+      rows.push({
+        _id: r._id,
+        orc,
+        date,
+        descricao: item.descricao,
+        quant: item.quant,
+        preco_unit: item.preco_unit,
+      });
+    }
+  }
+  return rows;
+}
+
+function sortRows(rows: FlatRow[], key: SortKey, dir: SortDir): FlatRow[] {
+  return [...rows].sort((a, b) => {
+    const av = a[key] ?? "";
+    const bv = b[key] ?? "";
+    const cmp = av.localeCompare(bv, "pt", { numeric: true, sensitivity: "base" });
+    return dir === "asc" ? cmp : -cmp;
+  });
+}
+
+interface SortableThProps {
+  label: string;
+  sortKey: SortKey;
+  currentKey: SortKey;
+  currentDir: SortDir;
+  align?: "left" | "right";
+  onClick: (key: SortKey) => void;
+}
+
+function SortableTh({ label, sortKey, currentKey, currentDir, align = "left", onClick }: SortableThProps) {
+  const isActive = currentKey === sortKey;
+  return (
+    <th
+      className={cn(
+        "px-4 py-2 cursor-pointer select-none",
+        align === "right" ? "text-right" : "text-left"
+      )}
+      onClick={() => onClick(sortKey)}
+    >
+      <div className={cn("flex items-center gap-1", align === "right" ? "justify-end" : "justify-start")}>
+        <span>{label}</span>
+        <span className="inline-block w-3 h-3 ml-1 flex-shrink-0">
+          {isActive ? (
+            currentDir === "asc" ? (
+              <ArrowUp className="h-3 w-3" />
+            ) : (
+              <ArrowDown className="h-3 w-3" />
+            )
+          ) : null}
+        </span>
+      </div>
+    </th>
+  );
 }
 
 export default function SearchPage() {
@@ -15,6 +129,8 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("orc");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +146,6 @@ export default function SearchPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: query.trim() }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Search failed");
       setResults(data.results ?? []);
@@ -41,51 +156,76 @@ export default function SearchPage() {
     }
   };
 
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const rows = useMemo(() => {
+    const flat = flattenResults(results, query);
+    return sortRows(flat, sortKey, sortDir);
+  }, [results, query, sortKey, sortDir]);
+
   return (
-    <main className="max-w-3xl mx-auto p-8 space-y-6">
-      <h1 className="text-2xl font-bold">Search Quotes</h1>
+    <main className="p-8 space-y-6">
+      <h1 className="text-2xl">Search Quotes</h1>
 
       <form onSubmit={handleSearch} className="flex gap-2">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Describe what you're looking for…"
-          className="flex-1 border border-neutral-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          placeholder="e.g. expositor 10x15, bandeiras couché…"
+          className="flex-1 border border-border px-4 py-2 text-sm bg-input text-foreground placeholder:text-muted-foreground"
         />
         <button
           type="submit"
           disabled={loading || !query.trim()}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-2 bg-primary text-primary-foreground text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors hover:opacity-90"
         >
-          {loading ? "Searching…" : "Search"}
+          {loading ? "A pesquisar…" : "Pesquisar"}
         </button>
       </form>
 
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+        <p className="text-sm text-status-error bg-status-error-muted border border-status-error px-4 py-2">
           {error}
         </p>
       )}
 
-      {results.length > 0 && (
-        <ul className="space-y-3">
-          {results.map((r, i) => (
-            <li key={i} className="border rounded-lg p-4 space-y-1">
-              <p className="text-sm">{r.descricao}</p>
-              <div className="flex flex-wrap gap-3 text-xs text-neutral-500 mt-2">
-                <span>Score: {r._score.toFixed(4)}</span>
-                <span>Confidence: {(r.confidence * 100).toFixed(0)}%</span>
-                <span>Model: {r.model_used}</span>
-                <span className="truncate max-w-xs">Source: {r.source_path}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
+      {rows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr>
+                <SortableTh label="ORC" sortKey="orc" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
+                <SortableTh label="Data" sortKey="date" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
+                <SortableTh label="Descrição" sortKey="descricao" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
+                <SortableTh label="Quant." sortKey="quant" currentKey={sortKey} currentDir={sortDir} align="right" onClick={handleSort} />
+                <SortableTh label="Preço Unit." sortKey="preco_unit" currentKey={sortKey} currentDir={sortDir} align="right" onClick={handleSort} />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={`${row._id}-${i}`} className="imx-border-b">
+                  <td className="px-4 py-2 whitespace-nowrap text-muted-foreground">{row.orc}</td>
+                  <td className="px-4 py-2 whitespace-nowrap text-muted-foreground">{row.date}</td>
+                  <td className="px-4 py-2">{row.descricao}</td>
+                  <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap">{row.quant}</td>
+                  <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap">{row.preco_unit}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
-      {!loading && results.length === 0 && query && !error && (
-        <p className="text-sm text-neutral-400 text-center py-8">No results found.</p>
+      {!loading && rows.length === 0 && query && !error && (
+        <p className="text-sm text-muted-foreground text-center py-8">Sem resultados.</p>
       )}
     </main>
   );

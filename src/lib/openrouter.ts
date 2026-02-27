@@ -34,6 +34,7 @@ export async function chatCompletion(
       temperature: opts.temperature ?? 0.1,
       response_format: opts.response_format,
     }),
+    signal: AbortSignal.timeout(60_000),
   });
 
   if (!res.ok) {
@@ -63,6 +64,7 @@ export async function createEmbedding(
       "X-Title": "Astrografe Quote Parser",
     },
     body: JSON.stringify({ model, input: text }),
+    signal: AbortSignal.timeout(20_000),
   });
 
   if (!res.ok) {
