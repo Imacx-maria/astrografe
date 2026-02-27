@@ -8,8 +8,8 @@ import { UploadCloud, Search, Settings, Sun, Moon, PanelLeft, PanelLeftClose } f
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { title: 'Ingest', href: '/ingest', icon: UploadCloud },
   { title: 'Search', href: '/search', icon: Search },
+  { title: 'Ingest', href: '/ingest', icon: UploadCloud },
   { title: 'Settings', href: '/settings', icon: Settings },
 ]
 
