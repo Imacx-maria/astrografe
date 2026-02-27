@@ -54,4 +54,17 @@ describe("normalizeText", () => {
     expect(result).toContain("Caneta esferográfica em plástico ABS com mecanismo de clique, tinta azul, gravação laser 1 face.");
     expect(result).toContain("Preço unitário: 0,85€");
   });
+
+  it("returns empty string for empty input", () => {
+    expect(normalizeText("")).toBe("");
+  });
+
+  it("returns empty string for whitespace-only input", () => {
+    expect(normalizeText("   ")).toBe("");
+  });
+
+  it("does NOT join lines when first line ends with colon (label: value pattern)", () => {
+    const input = "Descrição:\ncaixa individual com janela";
+    expect(normalizeText(input)).toBe("Descrição:\ncaixa individual com janela");
+  });
 });
